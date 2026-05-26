@@ -13,7 +13,9 @@
       "Bash(python -c \"import PyPDF2; print\\('PyPDF2 ok'\\)\")",
       "mcp__ide__executeCode",
       "Bash(python *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(pip list *)"
     ]
   }
 }
