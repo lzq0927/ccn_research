@@ -6,7 +6,14 @@
       "Bash(python3 -m pip show python-pptx)",
       "Bash(python3 -m pip install python-pptx -q)",
       "Bash(python generate_ppt.py)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(git stash *)",
+      "Bash(curl *)",
+      "Bash(python -c \"import fitz; print\\('ok'\\)\")",
+      "Bash(python -c \"import PyPDF2; print\\('PyPDF2 ok'\\)\")",
+      "mcp__ide__executeCode",
+      "Bash(python *)",
+      "Bash(git add *)"
     ]
   }
 }
