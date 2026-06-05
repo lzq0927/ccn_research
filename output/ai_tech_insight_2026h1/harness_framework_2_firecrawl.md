@@ -1,140 +1,174 @@
-# Firecrawl — Agent Harness 两阶段生命周期 + 四组件架构
+# Firecrawl -- Agent Harness 两阶段生命周期 + 四组件架构
 
-**来源**: https://www.firecrawl.dev/blog/what-is-an-agent-harness
-**日期**: 2026-06-05
+> 来源: https://www.firecrawl.dev/blog/what-is-an-agent-harness
 
----
+## 一、框架概述
 
-## 一、核心定义
+Firecrawl 的 Agent Harness 框架以其工程实践性和对失败模式的系统性分析著称。文章作者 Ninad Pathak 从 Mitchell Hashimoto 2026年2月的博文出发,结合 OpenAI 的百万行代码实践,构建了一个以"两阶段生命周期"和"四组件架构"为核心的 Harness 框架。该框架的独特之处在于它不仅描述了 Harness 应该是什么,更深入分析了没有 Harness 时 Agent 会如何失败,并提供了三种可选的架构模式。
 
-Anthony Alcaraz（Firecrawl）给出了一个精炼的定义：Agent Harness是"管理上下文生命周期的完整架构系统"（a complete architectural system that manages the lifecycle of context）。这一定义将Harness的本质聚焦于上下文管理——从上下文的创建、维护、压缩到恢复的全生命周期治理。
+## 二、核心定义
 
-### 为什么需要Harness：五种失败模式
+### 2.1 基础定义
 
-Firecrawl识别了没有Harness的Agent系统常见的五种失败模式：
+Agent Harness 是围绕 AI 模型的软件基础设施,管理模型实际推理之外的一切事务。它充当 LLM 与外部世界之间的中介,处理工具执行、内存存储、状态持久化和错误恢复。
 
-1. **无状态/一次性尝试（Stateless / One-shot）**：Agent每次交互都从头开始，无法积累和利用历史状态，导致重复劳动和效率低下。
-2. **假成功（False Success）**：Agent声称任务完成，但实际上输出错误或不完整。没有独立验证层，Model的"自信"难以被质疑。
-3. **上下文腐烂（Context Rot）**：随着对话历史增长，早期关键信息被稀释或丢失，Agent的决策质量逐渐退化。
-4. **幻觉工具调用（Hallucinated Tool Calls）**：Model生成不存在的工具名称或错误参数格式，导致运行时崩溃。
-5. **状态丢失（State Loss）**：长时间运行的Agent因进程崩溃或重启而丢失所有进度，必须从头开始。
+### 2.2 Anthony Alcaraz 的定义
 
----
+Anthony Alcaraz,《Agentic Graph RAG》(O'Reilly)作者,给出了一个更为学术化的定义:
 
-## 二、两阶段生命周期模型
+> "管理上下文生命周期的完整架构系统:从意图捕获到规范、编译、执行、验证和持久化"——覆盖除 LLM 本身之外的一切。
 
-Firecrawl的核心贡献之一是将Harness的运行明确划分为两个阶段：
+### 2.3 Anthropic 工程团队的描述
 
-### 阶段1：初始化阶段（Initialization Phase，运行一次）
+Anthropic 自身工程团队将 Claude Agent SDK 描述为:
 
-初始化阶段在Agent开始执行任务前运行一次，负责建立整个执行环境：
+> "一个强大的、通用的 Agent Harness,擅长编码以及其他需要模型使用工具来收集上下文、规划和执行的任务。"
 
-- **环境搭建**：创建沙箱工作空间，配置工具权限，加载必要的依赖。
-- **结构化任务列表**：将用户的高级目标分解为结构化的任务队列，每个任务有明确的输入、输出和完成标准。
-- **版本控制初始化**：创建Git仓库，设置初始分支和commit conventions，为后续的增量变更提供版本追踪。
-- **Progress File**：创建一个JSON格式的进度文件，记录每个任务的状态（pending/in-progress/completed）、执行结果和中间产物。Firecrawl特别强调JSON优于Markdown，因为JSON具有确定的结构，可以被程序可靠地解析和更新。
+SDK 处理上下文压缩(Context Compaction)、工具分派(Tool Dispatch)、会话管理(Session Management)和进度追踪(Progress Tracking)。Claude 提供推理,SDK 提供其他一切。
 
-### 阶段2：执行阶段（Execution Phase，循环运行）
+## 三、为什么需要 Harness:六种失败模式
 
-执行阶段是一个持续运行的循环，每次迭代包含四个步骤：
+Firecrawl 文章系统性地归纳了没有 Harness 时 Agent 的六种失败模式:
 
-1. **加载状态**：从Progress File和外部存储中恢复当前执行状态。
-2. **选择下一个未完成任务**：根据依赖关系和优先级选择下一个待处理的任务。
-3. **增量工作**：Agent执行一小步增量工作，生成代码、修改文件或调用工具。
-4. **保存进度**：将本次增量工作的结果写回Progress File，更新任务状态。
+### 3.1 状态丢失 (State Loss)
 
-这种"小步快跑"的策略确保即使Agent在任意时刻崩溃，进度损失也仅限于最后一次增量步骤。
+LLM 天生是无状态的。每次新会话从零开始,没有之前运行的记忆。这好比一个软件项目中每个工程师对之前完成的工作一无所知。
 
----
+### 3.2 一次性尝试 (One-shot Failure)
 
-## 三、Interception Loop（拦截循环）详解
+Agent 试图一次性完成所有工作,在实现过程中耗尽上下文,留下半成品代码库,下一次会话浪费 Token 猜测之前做了什么。
 
-Firecrawl提出的Interception Loop是Harness架构的核心控制流机制：
+### 3.3 假成功 (False Success)
 
-```
-Model输出Tool Call → Harness拦截 → 验证参数 → 沙箱执行 → 清洗输出 → 注入回上下文
-```
+后续会话在看到部分进度后,不验证任何东西是否真正工作,就宣布任务完成。
 
-这个循环的关键在于Harness在Model和外部世界之间充当了一个"中间人"代理：
+### 3.4 上下文腐烂 (Context Rot)
 
-- **拦截**：Harness捕获Model生成的每一个工具调用，在执行前进行验证。
-- **参数验证**：检查参数类型、范围、格式是否合法，防止幻觉工具调用穿透到执行层。
-- **沙箱执行**：在隔离环境中执行工具调用，限制副作用范围。
-- **输出清洗**：过滤工具返回结果中的敏感信息或无关噪音，只将精炼后的信息注入回上下文。
-- **上下文注入**：将清洗后的输出以结构化格式插入对话历史，确保Model在后续推理中能正确利用这些信息。
+上下文窗口充满了工具输出、历史记录和先前的推理。随着填充,模型失去对原始指令的跟踪。即使有 200K+ Token 窗口,密集的上下文中部内容也会被忽略。Stanford 的 Liu et al. (2023) "Lost in the Middle" 研究证实了这一现象。
 
----
+### 3.5 幻觉工具调用 (Hallucinated Tool Calls)
 
-## 四、四大核心组件
+没有验证时,Agent 会以错误的参数类型调用函数或引用不存在的 API。没有 Harness 拦截调用,它会浪费 Token 反复尝试同样损坏的调用。
 
-### 组件1: Tool Integration Layer
+### 3.6 失败时状态丢失 (Lost State on Failure)
 
-工具集成层提供了Agent与外部世界交互的标准化接口，覆盖五类核心操作：
+任何网络超时或服务器重启都会清除内存中的进度。下一次会话从零开始。
 
-- 文件读写（File I/O）
-- 沙箱代码执行（Sandboxed Code Execution）
-- 数据库查询（Database Queries）
-- API调用（API Calls）
-- Web访问（Web Access）
+## 四、两阶段生命周期
 
-每类操作都经过Harness的拦截、验证和清洗流程。
+Firecrawl 框架的核心是"两阶段生命周期"模型:
 
-### 组件2: Memory and State Management
+### 4.1 初始化阶段(运行一次)
 
-Firecrawl提出三层记忆架构：
+在项目启动时运行一次,完成以下工作:
+- **环境搭建**: 创建文件夹结构、配置开发环境
+- **结构化任务列表**: 将项目分解为有序的、可追踪的任务
+- **版本控制初始化**: 建立初始 Git 提交
+- **Progress File**: 编写一个进度文件,供未来会话读取
 
-- **Working Context**：当前Context Window中的活跃信息，容量有限但访问速度最快。
-- **Session State**：以JSON格式持久化的会话状态，包含任务进度、中间结果、决策记录。
-- **Long-term Memory**：向量数据库中的持久化知识，支持语义检索和跨会话复用。
+### 4.2 执行阶段(循环运行)
 
-Firecrawl特别强调JSON优于Markdown作为状态格式——Markdown虽然人类可读性强，但结构不确定，无法被程序可靠地解析和维护。
+每次会话重复执行以下循环:
+- **加载状态**: 读取 Progress File 和 Git 历史
+- **选择下一个未完成任务**: 从结构化任务列表中选取
+- **增量工作**: 对选定任务进行增量开发
+- **保存进度**: 更新 Progress File,提交 Git,记录完成状态
 
-### 组件3: Context Engineering and Compression
+关键洞察:没有会话需要知道之前发生了什么,因为 Harness 将知识外化到文件和提交历史中。
 
-上下文工程与压缩组件解决Context Window有限性的核心约束：
+### 4.3 Interception Loop (拦截循环)
 
-- **压缩（Compression）**：将冗长的对话历史和工具输出压缩为简洁的结构化摘要。
-- **RAG检索（Retrieval-Augmented Generation）**：从外部知识库中按需检索相关信息，而非将所有信息预加载到上下文。
-- **"Lost in the Middle"边界位置策略**：基于研究发现，LLM对上下文开头和结尾的信息利用率最高，中间部分容易被忽略。因此Harness在组织上下文时，将关键信息放置在边界位置，次要信息放在中间。
+当模型输出工具调用时(如 `search("competitive pricing")` 或 `bash("npm test")`),Harness:
+1. **拦截**该调用
+2. **验证**参数
+3. 在沙箱中**执行**
+4. **清洗**输出
+5. 将结果**注入**回上下文
 
-### 组件4: Verification and Guardrails
+模型永远不直接触碰外部系统。
 
-验证与护栏组件确保Agent输出的质量和安全：
+## 五、四大核心组件
 
-- **测试套件（Test Suites）**：Agent生成的代码必须通过预定义的单元测试和集成测试。
-- **浏览器测试（Browser Testing）**：对于前端变更，通过自动化浏览器测试验证UI行为。
-- **HITL中断（Human-in-the-Loop Interrupts）**：在关键决策点暂停执行，请求人工确认。
+### 5.1 Tool Integration Layer (工具集成层)
 
----
+定义 Agent 在世界中的能力:文件读写、代码执行、数据库查询、API 调用和 Web 访问。Harness 暴露可调用函数,在执行前验证调用,返回清洗后的结果。
 
-## 五、三种架构模式
+### 5.2 Memory + State Management (内存与状态管理)
 
-Firecrawl根据任务复杂度提出三种递进的架构模式：
+Harness 管理三种内存类型:
+- **Working Context** (工作上下文): 即时提示,临时的
+- **Session State** (会话状态): 当前任务的持久日志
+- **Long-term Memory** (长期记忆): 跨任务的知识,可以是向量存储、结构化文件或内存层
 
-1. **单Agent Supervisor**：一个Agent完成所有工作，Harness提供工具和记忆支持。适合简单、线性的任务。
-2. **Initializer-Executor Split**：初始化和执行职责分离为两个独立的Agent/阶段。适合中等复杂度的多步骤任务。
-3. **Multi-Agent Coordination**：多个专业化Agent协同工作，由一个Coordinator Agent负责任务分配和结果整合。适合复杂、跨领域的大型任务。
+Anthropic 团队发现 **JSON 比 Markdown 更适合**特性追踪文件——模型不太可能意外覆盖或重新格式化 JSON。
 
----
+Sarah Wooders (Letta 联合创始人) 的观点:记忆不是插件,它就是 Harness。关键设计问题是:记忆存放在哪里,谁拥有它,会话之间持久化什么,Agent 如何检索它?这些不是模型问题,而是 Harness 必须回答的工程问题。
 
-## 六、关键数据
+### 5.3 Context Engineering + Compression (上下文工程与压缩)
 
-- **ICML 2025游戏Harness研究**：同一模型在开启Harness vs. 关闭Harness的情况下，胜率出现显著差异。这为Harness的有效性提供了实证支持。
-- **Claude Code SDK**：已在512K+行代码的生产环境中部署，验证了Harness架构在大规模工程场景中的可行性。
+在每次模型调用时,Harness 决定包含什么、压缩什么:
+- **Compaction**: 将旧对话历史总结为精简笔记
+- **Context Retrieval (RAG)**: 仅拉取当前步骤相关的文档,而非预先加载所有内容
+- **边界优先定位**: 基于"Lost in the Middle"研究,将最重要的上下文放在提示边界
 
----
+### 5.4 Verification + Guardrails (验证与护栏)
 
-## 七、框架评价
+生产级 Agent Harness 在将工作视为完成之前先验证输出:
+- **测试套件**: 编码 Agent 在每个特性后运行测试,只有通过才标记完成
+- **Human-in-the-Loop**: 对于写入生产数据库或发送外部通信等敏感操作,实施人工中断
+- **浏览器测试**: 使用 Puppeteer 等工具进行基于浏览器的测试,捕获代码无法察觉的 Bug
+
+## 六、三种架构模式
+
+### 6.1 单 Agent Supervisor
+
+一个模型在循环中使用工具、内存和验证。Harness 管理初始化、上下文注入、工具分派、状态持久化和清理。适用于有界任务,如带有知识库和工单系统的客户支持 Agent。
+
+### 6.2 Initializer-Executor Split
+
+Anthropic 记录的长时间编码任务方法:
+- **Initializer** 运行一次,设置持久项目环境(文件夹结构、特性列表、init.sh、初始 Git 提交)
+- **Executor** 会话读取环境,对一个特性增量工作,运行测试,提交,更新进度文件,干净退出
+- 项目环境是所有会话的共享内存
+
+### 6.3 Multi-Agent Coordination
+
+对于复杂项目,Harness 分派专家 Agent(研究员、编写者、审查者),管理交接,使每个 Agent 获得上一步的相关上下文而不含不相关历史。
+
+**关键数据:ICML 2025 论文** "General Modular Harness for LLM Agents in Multi-Turn Gaming Environments" 用可分离的感知、记忆和推理模块在 GPT-4 级模型上测试了这一模式。**有 Harness 的模型在所有测试游戏中一致优于无 Harness 的同一模型**。
+
+## 七、Harness vs Framework vs Orchestrator
+
+| 概念 | 核心职责 |
+|------|---------|
+| Agent Framework | 构建 Agent 的库和抽象 (LangChain, LlamaIndex) |
+| Agent Harness | 用工具、内存和状态管理执行 Agent 的运行时系统 |
+| Orchestrator | 决定何时以及如何调用模型的控制流 |
+
+**关键关系**: Framework 提供组件;Harness 将它们组装成具有默认值和集成的运行系统;Orchestrator 决定模型调用的序列。Harness 提供这些调用使用的能力:工具、内存、上下文。
+
+## 八、关键数据点
+
+- **Claude Code SDK**: 超过 512,000 行代码,是一个随模型能力增强而持续增长的 Harness,而非缩小。Harrison Chase (LangChain 创始人) 认为:更好的模型扩展了 Harness 需要做的事情,而非取代对它们的需求。
+- **ICML 2025 游戏研究**: 在所有测试游戏中,Harness 启用 vs 禁用时,同一 GPT-4 级模型的一致性能提升,无需更改模型权重或提示。
+- **OpenAI 实践**: 3人团队使用 Harness Engineering 产出百万行代码,每天 3.5 PRs/engineer,零手写代码。
+
+## 九、框架评价
 
 ### 优势
 
-- **两阶段生命周期模型**清晰直观，将Harness的职责边界定义得非常明确——初始化做一次性的环境搭建，执行循环专注于增量进展。
-- **Interception Loop**概念将Harness的核心机制抽象为一个简洁的控制流模式，易于理解和实现。
-- **失败模式分类**帮助开发者快速诊断当前系统缺乏哪些Harness能力。
-- **JSON优于Markdown的务实建议**体现了对工程可靠性的重视。
+- **失败模式分析最全面**: 六种失败模式的归纳是各框架中最系统的,为诊断现有系统问题提供了清晰检查清单。
+- **两阶段生命周期模型**: 简洁而实用,直接可操作,特别适合长周期编码任务。
+- **架构模式分级**: 三种模式的渐进复杂度为不同规模团队提供了明确选择。
+- **实证数据支撑**: 引用 ICML 2025 论文和 Anthropic 实验数据,增强了说服力。
 
 ### 不足
 
-- **三种架构模式的适用场景描述偏粗**，缺乏具体的决策框架来指导选择。
-- **对多Agent协调模式**的讨论较为简略，缺少具体的协调协议和冲突解决机制。
-- **"Lost in the Middle"策略**虽然指出了上下文位置的重要性，但没有给出具体的放置算法或实现建议。
+- **工具层偏向**: 作为 Firecrawl (Web 抓取工具) 的文章,对 Tool Integration Layer 的讨论有明显的自我推广倾向。
+- **缺少形式化验证层**: 与 Datadog 框架相比,缺乏 DST、TLA+ 等深层验证方法的讨论。
+- **对 Context Engineering 的讨论偏浅**: 虽然提到了 Compaction 和 RAG,但未深入探讨具体的 Token 预算分配策略。
+- **Memory 移植性问题**: 虽然提出了 Memory portability 的担忧,但未给出具体解决方案。
+
+---
+
+*本文基于 Firecrawl 公开博客内容整理分析,仅供参考。*
