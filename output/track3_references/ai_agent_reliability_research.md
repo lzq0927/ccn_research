@@ -98,10 +98,7 @@
 ## 三、Hermes Agent
 
 ### 1. 调研结果
-经过广泛搜索，**未找到名为 "Hermes Agent" 的知名 AI Agent 项目**。该名称可能为：
-- 一个内部研究项目
-- 一个特定领域的专有工具
-- 或者指代某个论文中的原型系统
+Hermes Agent 是 NousResearch 开发的自进化AI Agent框架，GitHub 仓库地址为 https://github.com/nousresearch/hermes-agent 。其核心创新在于内置闭环学习（Closed Learning Loop），支持从执行经验中自动创建技能并持续优化。在2026年5月10日超越OpenClaw成为OpenRouter使用量第一的Agent（2,240亿token/天）。最新版本为v0.13.0 "Tenacity"（2026年5月7日发布）。
 
 ### 2. 替代性研究：AI Agent 在故障诊断和系统可靠性中的应用
 

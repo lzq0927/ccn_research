@@ -210,7 +210,7 @@ Phase 3：人机协同部署
   - 低置信度场景（如切片级故障）：人工决策，AI辅助提供上下文
 
 Phase 4：持续进化
-  - 引入Hermes Agent的闭环学习机制，从每次故障诊断中自动优化策略
+  - 引入Hermes Agent的闭环学习机制（Closed Learning Loop），从每次故障诊断中自动优化策略。Hermes的幻觉门控（Hallucination Gate）和子Agent隔离机制可为5GC故障诊断提供级联错误防护
   - 结合张圣林团队的延迟感知因果推断，处理5GC长链路传播延迟
 ```
 
