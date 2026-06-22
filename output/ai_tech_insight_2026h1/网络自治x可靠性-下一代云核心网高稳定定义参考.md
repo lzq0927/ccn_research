@@ -12,11 +12,11 @@
 
 | 「网络自治五自」 | 对应业界权威术语 | 标准出处 |
 |---|---|---|
-| **自感知** | Observability / Awareness / Anomaly Detection / 实时数字孪生映射 | TMF AN「Awareness」轴;ITU-T Y.3090 [1];arXiv「Self-Awareness module」[2] |
+| **自感知** | Observability / Awareness / Anomaly Detection / 实时数字孪生映射 | TMF AN「Awareness」轴;ITU-T Y.3090 [1];arXiv「Situation Awareness」(Kalman+LSTM 前瞻感知)[2] |
 | **自愈合** | Self-Healing / Auto-remediation / Fault Mgmt 闭环 | ETSI ZSM 闭环 [3];ETSI WP69 NDT [4];rApps 自愈 |
-| **自验证** | Continuous Validation / IBN Assurance / 数字孪生「what-if」预演 | IETF RFC 9315 [5];TMF TR284G (DTCLA) [6];Forward Networks/IP Fabric |
-| **自闭环** | Closed-Loop Automation | ETSI GS ZSM 009 系列 [3];CLARA [7];Ericsson 五阶段闭环 |
-| **自演进** | Active Learning / 模型生命周期 / 联邦学习 / 在线 RL | 3GPP Rel-20 联邦 AI/ML [8];Phoenix Stack [9];Ericsson active learning |
+| **自验证** | Continuous Validation / IBN Assurance / 数字孪生「what-if」预演 | IETF RFC 9315 [5];TMF TR284G (DTCLA) [6];Forward Networks/IP Fabric;**Sifakis DTA+RTA**(设计时形式化+运行时兜底,补孪生预演之外)[42] |
+| **自闭环** | Closed-Loop Automation | ETSI GS ZSM 009 系列 [3];CLARA [7];Ericsson 五阶段闭环;**Sifakis 双闭环(Reactive+Proactive)**[42] |
+| **自演进** | Active Learning / 模型生命周期 / 联邦学习 / 在线 RL | 3GPP Rel-20 联邦 AI/ML [8];Phoenix Stack [9];Ericsson active learning;**Sifakis「从环境学习」+ 集体智能三级**[42] |
 
 「可靠性四段论」(不出故障 → 影响小 → 快速恢复业务 → 快速修复)几乎一比一对应业界 **Resilience Engineering** 的 Prevention → Containment → Recovery → Remediation 四象限,见第三节。
 
@@ -127,6 +127,8 @@ Ericsson 的实践点出关键结论:**单 Agent 不够,需要「Supervisor + �
 | **③ 出故障快速恢复业务** | Recovery / 业务连续性(RTO↓) | 无状态秒级重启、K8s 自愈(自动重调度/重启)[40]、流量调度/灾备切换、geo-redundancy | 自愈合(应急回路) |
 | **④ 出故障快速修复** | Remediation / Root-Cause Fix(MTTR↓) | Agent 驱动诊断+修复、根因分析(Ericsson RCA)、**zero-touch fault remediation** [27] | 自愈合 + 自验证(根治回路) |
 
+> **补充判据(Sifakis 参考架构 [42] §2.4 Frequency × Urgency)**:用 **频率 × 紧迫性** 二维判定任务归属——**低频且低紧迫 → 预防式(对应①,归 Proactive)**;**高频或高紧迫 → 恢复式(对应③,归 Reactive)**;其余归人;且边界随网络成熟度**动态漂移**(网络老化、业务增多后,「故障恢复」会从 PB 迁移到 RB)。这是「①/③ 任务何时该迁移」的判据,补足等级模型(TM Forum L0–L5)之外的**任务级迁移规则**。
+>
 > **关键洞察**:③ 和 ④ 要**分开定义 KPI 与机制**——③ 是「业务先通」(恢复时间),④ 是「根因先除」(修复时间)。很多架构把二者混为一谈,导致要么恢复慢,要么修了又坏。下一代云核心网应明确区分 **RTO(业务恢复)** 与 **MTTR(根因修复)** 两套指标。
 
 ### 3.2 可靠性域的独特性——为什么它「最该上 Agent,也最难上」
@@ -231,3 +233,4 @@ Ericsson 的实践点出关键结论:**单 Agent 不够,需要「Supervisor + �
 [39] Splunk — Chaos Testing Explained — https://www.splunk.com/en_us/blog/learn/chaos-testing.html
 [40] Self-Healing Microservices Architecture(IJETCSIT)— https://ijetcsit.org/index.php/ijetcsit/article/view/381
 [41] phoenixNAP — Five Nines Availability — https://phoenixnap.com/glossary/five-nines
+[42] Sifakis et al. — A Reference Architecture for Autonomous Networks: An Agent-Based Approach (arXiv 2503.12871) — https://arxiv.org/abs/2503.12871
